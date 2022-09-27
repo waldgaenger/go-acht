@@ -65,7 +65,7 @@ func (c8 *Chip8) Init(scaleFactor int32, colorProfile string) {
 	}
 
 	if err := sdl.Init(sdl.INIT_EVERYTHING); err != nil {
-		fmt.Printf("An error occured while trying to initialize the SDL componentes: %v", err)
+		fmt.Printf("An error occurred while trying to initialize the SDL componentes: %v", err)
 		sdl.Quit()
 		os.Exit(-1)
 	}
@@ -74,7 +74,7 @@ func (c8 *Chip8) Init(scaleFactor int32, colorProfile string) {
 		64*c8.scaleFactor, 32*c8.scaleFactor, sdl.WINDOW_SHOWN)
 
 	if err != nil {
-		fmt.Printf("An error occured  while trying to create the SDL window: %v", err)
+		fmt.Printf("An error occurred  while trying to create the SDL window: %v", err)
 		sdl.Quit()
 		os.Exit(-1)
 	}
@@ -349,7 +349,7 @@ func (c8 *Chip8) LoadRom(pathToRom string) {
 
 	if err != nil {
 		f.Close()
-		log.Fatalf("An error occured while trying to open the ROM: %v\n", err)
+		log.Fatalf("An error occurred while trying to open the ROM: %v\n", err)
 	}
 
 	defer f.Close()
@@ -358,7 +358,7 @@ func (c8 *Chip8) LoadRom(pathToRom string) {
 
 	if err != nil {
 		f.Close()
-		log.Fatalf("An error occured while trying to read the ROM into memory: %v\n", err)
+		log.Fatalf("An error occurred while trying to read the ROM into memory: %v\n", err)
 	}
 
 	fmt.Println("[+] ROM successfully read into the memory.")
