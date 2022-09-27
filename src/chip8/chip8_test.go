@@ -5,25 +5,25 @@ import (
 	"testing"
 )
 
-func TestInit(t *testing.T) {
-	c8 := Chip8{}
+// func TestInit(t *testing.T) {
+// 	c8 := Chip8{}
 
-	c8.Init(20, "black-white")
+// 	c8.Init(20, "black-white")
 
-	t.Run("Program counter initialization", func(t *testing.T) {
-		if c8.programCounter != uint16(startAddress) {
-			t.Errorf("Program counter: want: %x, got: %x", 0x200, c8.programCounter)
-		}
-	})
+// 	t.Run("Program counter initialization", func(t *testing.T) {
+// 		if c8.programCounter != uint16(startAddress) {
+// 			t.Errorf("Program counter: want: %x, got: %x", 0x200, c8.programCounter)
+// 		}
+// 	})
 
-	t.Run("Font set memory location check", func(t *testing.T) {
-		for i := 0; i < fontSize; i++ {
-			if c8.memory[fontStartAddress+i] != fontSet[i] {
-				t.Errorf("Font set: want %x, got: %x", c8.memory[fontStartAddress+i], fontSet[i])
-			}
-		}
-	})
-}
+// 	t.Run("Font set memory location check", func(t *testing.T) {
+// 		for i := 0; i < fontSize; i++ {
+// 			if c8.memory[fontStartAddress+i] != fontSet[i] {
+// 				t.Errorf("Font set: want %x, got: %x", c8.memory[fontStartAddress+i], fontSet[i])
+// 			}
+// 		}
+// 	})
+// }
 
 func TestLoadRom(t *testing.T) {
 	c8 := Chip8{}
@@ -70,28 +70,27 @@ func TestLoadRom(t *testing.T) {
 
 // }
 
-// func testop00e0(t *testing.t) {
-// 	c8 := chip8{}
+func TestOP00E0(t *testing.T) {
+	c8 := Chip8{}
 
-// 	for i, arr := range c8.display {
-// 		for j := range arr {
-// 			c8.display[i][j] = 1
-// 		}
-// 	}
+	for i, arr := range c8.display {
+		for j := range arr {
+			c8.display[i][j] = 1
+		}
+	}
 
-// 	c8.op00e0()
+	c8.op00E0()
 
-// 	t.run("op00e0: clearing the screen", func(t *testing.t) {
-// 		for i, arr := range c8.display {
-// 			for j := range arr {
-// 				if c8.display[i][j] != 0 {
-// 					t.errorf("expected all values to be zero, but found a non-zero value in display memory!")
-// 					t.failnow()
-// 				}
-// 			}
-// 		}
-// 	})
-// }
+	t.Run("OP00E0: Clearing the screen", func(t *testing.T) {
+		for i, arr := range c8.display {
+			for j := range arr {
+				if c8.display[i][j] != 0 {
+					t.Errorf("Expected all values to be zero but pixel [%d][%d] was not zero.", i, j)
+				}
+			}
+		}
+	})
+}
 
 func TestOP00EE(t *testing.T) {
 	c8 := Chip8{}
