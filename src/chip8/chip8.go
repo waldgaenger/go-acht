@@ -65,7 +65,7 @@ func (c8 *Chip8) Init(scaleFactor int32, colorProfile string) {
 	}
 
 	if err := sdl.Init(sdl.INIT_EVERYTHING); err != nil {
-		fmt.Printf("An error occurred while trying to initialize the SDL componentes: %v", err)
+		fmt.Printf("An error occurred while trying to initialize the SDL components: %v", err)
 		sdl.Quit()
 		os.Exit(-1)
 	}
