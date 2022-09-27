@@ -70,28 +70,28 @@ func TestLoadRom(t *testing.T) {
 
 // }
 
-func TestOP00E0(t *testing.T) {
-	c8 := Chip8{}
+// func testop00e0(t *testing.t) {
+// 	c8 := chip8{}
 
-	for i, arr := range c8.display {
-		for j := range arr {
-			c8.display[i][j] = 1
-		}
-	}
+// 	for i, arr := range c8.display {
+// 		for j := range arr {
+// 			c8.display[i][j] = 1
+// 		}
+// 	}
 
-	c8.op00E0()
+// 	c8.op00e0()
 
-	t.Run("OP00E0: Clearing the screen", func(t *testing.T) {
-		for i, arr := range c8.display {
-			for j := range arr {
-				if c8.display[i][j] != 0 {
-					t.Errorf("Expected all values to be zero, but found a non-zero value in display memory!")
-					t.FailNow()
-				}
-			}
-		}
-	})
-}
+// 	t.run("op00e0: clearing the screen", func(t *testing.t) {
+// 		for i, arr := range c8.display {
+// 			for j := range arr {
+// 				if c8.display[i][j] != 0 {
+// 					t.errorf("expected all values to be zero, but found a non-zero value in display memory!")
+// 					t.failnow()
+// 				}
+// 			}
+// 		}
+// 	})
+// }
 
 func TestOP00EE(t *testing.T) {
 	c8 := Chip8{}
