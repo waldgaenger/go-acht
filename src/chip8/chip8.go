@@ -326,10 +326,6 @@ func (c8 *Chip8) Cycle() {
 		fmt.Printf("Invalid opcode: %#X\n", c8.opcode)
 
 	}
-	// fmt.Println("Time: ", time.Since(lastTimeMillis))
-	// Decrement the delay timer and the sound timer at a rate of 60Hz
-	// if time.Since(lastTimeMillis) > (16.6 * 1000000) {
-	// 	lastTimeMillis = time.Now()
 	if c8.delayTimer > 0 {
 		c8.delayTimer--
 	}
@@ -337,7 +333,6 @@ func (c8 *Chip8) Cycle() {
 	if c8.soundTimer > 0 {
 		c8.soundTimer--
 	}
-	// }
 }
 
 func (c8 *Chip8) ShutDown() {
@@ -729,7 +724,6 @@ func (c8 *Chip8) opFX33() {
 	value /= 10
 
 	c8.memory[c8.indexRegister] = value % 10
-	
 
 }
 
