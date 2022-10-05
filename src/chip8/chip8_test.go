@@ -5,26 +5,6 @@ import (
 	"testing"
 )
 
-// func TestInit(t *testing.T) {
-// 	c8 := Chip8{}
-
-// 	c8.Init(20, "black-white")
-
-// 	t.Run("Program counter initialization", func(t *testing.T) {
-// 		if c8.programCounter != uint16(startAddress) {
-// 			t.Errorf("Program counter: want: %x, got: %x", 0x200, c8.programCounter)
-// 		}
-// 	})
-
-// 	t.Run("Font set memory location check", func(t *testing.T) {
-// 		for i := 0; i < fontSize; i++ {
-// 			if c8.memory[fontStartAddress+i] != fontSet[i] {
-// 				t.Errorf("Font set: want %x, got: %x", c8.memory[fontStartAddress+i], fontSet[i])
-// 			}
-// 		}
-// 	})
-// }
-
 func TestLoadRom(t *testing.T) {
 	c8 := Chip8{}
 	const romSize int = 494

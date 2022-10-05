@@ -149,15 +149,7 @@ func (c8 *Chip8) DisplayDebugger() {
 		}
 	}
 }
-
-func (c8 *Chip8) Cycle() {
-
-	// Fetch
-	c8.opcode = ((uint16(c8.memory[c8.programCounter]) << 8) | uint16(c8.memory[c8.programCounter+1]))
-
-	c8.programCounter += 2
-
-	// Key handling
+func (c8 *Chip8) keyHandler() {
 	for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
 		switch et := event.(type) {
 		case *sdl.QuitEvent:
@@ -236,7 +228,17 @@ func (c8 *Chip8) Cycle() {
 			}
 		}
 	}
+}
 
+func (c8 *Chip8) Cycle() {
+
+	// Fetch
+	c8.opcode = ((uint16(c8.memory[c8.programCounter]) << 8) | uint16(c8.memory[c8.programCounter+1]))
+
+	c8.programCounter += 2
+
+	// Key handling
+	c8.keyHandler()
 	// Decode and execute
 	switch c8.opcode & 0xF000 {
 	case 0x0000:
@@ -727,6 +729,7 @@ func (c8 *Chip8) opFX33() {
 	value /= 10
 
 	c8.memory[c8.indexRegister] = value % 10
+	
 
 }
 
