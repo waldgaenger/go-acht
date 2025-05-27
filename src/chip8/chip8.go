@@ -32,6 +32,18 @@ var fontSet = [80]byte{
 	0xF0, 0x80, 0xF0, 0x80, 0x80, // F
 }
 
+type colorProfile struct {
+	background uint32
+	foreground uint32
+}
+
+var profiles = map[string]colorProfile{
+	"black-white": {0x000000, 0xFFFFFF},
+	"night-sky":   {0x000044, 0xFFFFCC},
+	"console":     {0x000000, 0x22EE22},
+	"honey":       {0x996600, 0xFFCC00},
+}
+
 type Chip8 struct {
 	registers      [16]uint8
 	memory         [4096]uint8
@@ -70,6 +82,8 @@ func (c8 *Chip8) Init(scaleFactor int32, colorProfile string) {
 		os.Exit(-1)
 	}
 
+	c8.SetColorProfile(colorProfile)
+
 	window, err := sdl.CreateWindow("CHIP8 EMULATOR", sdl.WINDOWPOS_UNDEFINED, sdl.WINDOWPOS_UNDEFINED,
 		64*c8.scaleFactor, 32*c8.scaleFactor, sdl.WINDOW_SHOWN)
 
@@ -78,28 +92,24 @@ func (c8 *Chip8) Init(scaleFactor int32, colorProfile string) {
 		sdl.Quit()
 		os.Exit(-1)
 	}
-	if colorProfile == "black-white" {
-		c8.colorCodeBackground = 0x0000000
-		c8.colorCodeForeground = 0xFFFFFFF
-	}
-	if colorProfile == "night-sky" {
-		c8.colorCodeBackground = 0x000044
-		c8.colorCodeForeground = 0xFFFFCC
-	}
-	if colorProfile == "console" {
-		c8.colorCodeBackground = 0x000000
-		c8.colorCodeForeground = 0x22EE22
-	}
-	if colorProfile == "honey" {
-		c8.colorCodeBackground = 0x996600
-		c8.colorCodeForeground = 0xFFCC00
-	}
 	c8.sdlWindow = window
 	c8.running = true
 }
 
 func (c8 *Chip8) Running() bool {
 	return c8.running
+}
+
+// Sets the color profile specified by the user.
+func (c8 *Chip8) SetColorProfile(profileName string) {
+	if profile, ok := profiles[profileName]; ok {
+		c8.colorCodeBackground = profile.background
+		c8.colorCodeForeground = profile.foreground
+	} else {
+		// Default profile which is black-white
+		c8.colorCodeBackground = 0x000000 // black
+		c8.colorCodeForeground = 0xFFFFFF // white
+	}
 }
 
 func (c8 *Chip8) draw() {
