@@ -44,21 +44,25 @@ var profiles = map[string]colorProfile{
 	"honey":       {0x996600, 0xFFCC00},
 }
 
+var keyMap = map[sdl.Keycode]uint8{
+	sdl.K_1: 0x1, sdl.K_2: 0x2, sdl.K_3: 0x3, sdl.K_4: 0xC,
+	sdl.K_q: 0x4, sdl.K_w: 0x5, sdl.K_e: 0x6, sdl.K_r: 0xD,
+	sdl.K_a: 0x7, sdl.K_s: 0x8, sdl.K_d: 0x9, sdl.K_f: 0xE,
+	sdl.K_z: 0xA, sdl.K_x: 0x0, sdl.K_c: 0xB, sdl.K_v: 0xF,
+}
+
 type Chip8 struct {
-	registers      [16]uint8
-	memory         [4096]uint8
-	programCounter uint16
-	indexRegister  uint16
-	callStack      [16]uint16
-	stackPointer   uint8
-	opcode         uint16
-	keyPad         [16]uint8
-	// The delay timer is decremented at a rate of 60 Hz according to the specification.
-	delayTimer uint8
-	// The sound timer is decremented at a rate of 60 Hz according to the specification.
-	soundTimer uint8
-	// 64x32 monochrome display.
-	display             [32][64]uint8
+	registers           [16]uint8
+	memory              [4096]uint8
+	programCounter      uint16
+	indexRegister       uint16
+	callStack           [16]uint16
+	stackPointer        uint8
+	opcode              uint16
+	keyPad              [16]uint8
+	delayTimer          uint8         // The delay timer is decremented at a rate of 60 Hz according to the specification.
+	soundTimer          uint8         // The sound timer is decremented at a rate of 60 Hz according to the specification.
+	display             [32][64]uint8 // 64x32 monochrome display
 	sdlWindow           *sdl.Window
 	scaleFactor         int32
 	running             bool
@@ -161,79 +165,16 @@ func (c8 *Chip8) DisplayDebugger() {
 }
 func (c8 *Chip8) keyHandler() {
 	for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
-		switch et := event.(type) {
+		switch e := event.(type) {
 		case *sdl.QuitEvent:
 			c8.running = false
 		case *sdl.KeyboardEvent:
-			if et.Type == sdl.KEYUP {
-				switch et.Keysym.Sym {
-				case sdl.K_1:
-					c8.keyPad[0x1] = 0
-				case sdl.K_2:
-					c8.keyPad[0x2] = 0
-				case sdl.K_3:
-					c8.keyPad[0x3] = 0
-				case sdl.K_4:
-					c8.keyPad[0xC] = 0
-				case sdl.K_q:
-					c8.keyPad[0x4] = 0
-				case sdl.K_w:
-					c8.keyPad[0x5] = 0
-				case sdl.K_e:
-					c8.keyPad[0x6] = 0
-				case sdl.K_r:
-					c8.keyPad[0xD] = 0
-				case sdl.K_a:
-					c8.keyPad[0x7] = 0
-				case sdl.K_s:
-					c8.keyPad[0x8] = 0
-				case sdl.K_d:
-					c8.keyPad[0x9] = 0
-				case sdl.K_f:
-					c8.keyPad[0xE] = 0
-				case sdl.K_z:
-					c8.keyPad[0xA] = 0
-				case sdl.K_x:
-					c8.keyPad[0x0] = 0
-				case sdl.K_c:
-					c8.keyPad[0xB] = 0
-				case sdl.K_v:
-					c8.keyPad[0xF] = 0
-				}
-			} else if et.Type == sdl.KEYDOWN {
-				switch et.Keysym.Sym {
-				case sdl.K_1:
-					c8.keyPad[0x1] = 1
-				case sdl.K_2:
-					c8.keyPad[0x2] = 1
-				case sdl.K_3:
-					c8.keyPad[0x3] = 1
-				case sdl.K_4:
-					c8.keyPad[0xC] = 1
-				case sdl.K_q:
-					c8.keyPad[0x4] = 1
-				case sdl.K_w:
-					c8.keyPad[0x5] = 1
-				case sdl.K_e:
-					c8.keyPad[0x6] = 1
-				case sdl.K_r:
-					c8.keyPad[0xD] = 1
-				case sdl.K_a:
-					c8.keyPad[0x7] = 1
-				case sdl.K_s:
-					c8.keyPad[0x8] = 1
-				case sdl.K_d:
-					c8.keyPad[0x9] = 1
-				case sdl.K_f:
-					c8.keyPad[0xE] = 1
-				case sdl.K_z:
-					c8.keyPad[0xA] = 1
-				case sdl.K_x:
-					c8.keyPad[0x0] = 1
-				case sdl.K_c:
-					c8.keyPad[0xB] = 1
-				case sdl.K_v:
-					c8.keyPad[0xF] = 1
+			if idx, ok := keyMap[e.Keysym.Sym]; ok {
+				switch e.Type {
+				case sdl.KEYDOWN:
+					c8.keyPad[idx] = 1
+				case sdl.KEYUP:
+					c8.keyPad[idx] = 0
 				}
 			}
 		}
