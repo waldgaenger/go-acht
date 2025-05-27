@@ -51,8 +51,47 @@ var keyMap = map[sdl.Keycode]uint8{
 	sdl.K_z: 0xA, sdl.K_x: 0x0, sdl.K_c: 0xB, sdl.K_v: 0xF,
 }
 
+type opcodeHandler func(*Chip8)
+
+var dispatchTable = map[uint16]opcodeHandler{
+	0x00E0: (*Chip8).op00E0,
+	0x00EE: (*Chip8).op00EE,
+	0x1000: (*Chip8).op1NNN,
+	0x2000: (*Chip8).op2NNN,
+	0x3000: (*Chip8).op3XKK,
+	0x4000: (*Chip8).op4XKK,
+	0x5000: (*Chip8).op5XY0,
+	0x6000: (*Chip8).op6XKK,
+	0x7000: (*Chip8).op7XKK,
+	0x8000: (*Chip8).op8XY0,
+	0x8001: (*Chip8).op8XY1,
+	0x8002: (*Chip8).op8XY2,
+	0x8003: (*Chip8).op8XY3,
+	0x8004: (*Chip8).op8XY4,
+	0x8005: (*Chip8).op8XY5,
+	0x8006: (*Chip8).op8XY6,
+	0x8007: (*Chip8).op8XY7,
+	0x800E: (*Chip8).op8XYE,
+	0x9000: (*Chip8).op9XY0,
+	0xA000: (*Chip8).opANNN,
+	0xB000: (*Chip8).opBNNN,
+	0xC000: (*Chip8).opCXKK,
+	0xD000: func(c8 *Chip8) { c8.opDXYN(); c8.draw() },
+	0xE09E: (*Chip8).opEX9E,
+	0xE0A1: (*Chip8).opEXA1,
+	0xF007: (*Chip8).opFX07,
+	0xF00A: (*Chip8).opFX0A,
+	0xF015: (*Chip8).opFX15,
+	0xF018: (*Chip8).opFX18,
+	0xF01E: (*Chip8).opFX1E,
+	0xF029: (*Chip8).opFX29,
+	0xF033: (*Chip8).opFX33,
+	0xF055: (*Chip8).opFX55,
+	0xF065: (*Chip8).opFX65,
+}
+
 type Chip8 struct {
-	registers           [16]uint8
+	registers           [16]uint8 // All 16 registers of the emulator
 	memory              [4096]uint8
 	programCounter      uint16
 	indexRegister       uint16
@@ -63,9 +102,9 @@ type Chip8 struct {
 	delayTimer          uint8         // The delay timer is decremented at a rate of 60 Hz according to the specification.
 	soundTimer          uint8         // The sound timer is decremented at a rate of 60 Hz according to the specification.
 	display             [32][64]uint8 // 64x32 monochrome display
-	sdlWindow           *sdl.Window
+	sdlWindow           *sdl.Window   // Stores the corresponding SDL main window
 	scaleFactor         int32
-	running             bool
+	running             bool // Indicates whether the emulator is running
 	colorCodeForeground uint32
 	colorCodeBackground uint32
 }
@@ -190,93 +229,14 @@ func (c8 *Chip8) Cycle() {
 
 	// Key handling
 	c8.keyHandler()
-	// Decode and execute
-	switch c8.opcode & 0xF000 {
-	case 0x0000:
-		switch c8.opcode & 0x00FF {
-		case 0x00E0:
-			c8.op00E0()
-		case 0x00EE:
-			c8.op00EE()
-		}
-	case 0x1000:
-		c8.op1NNN()
-	case 0x2000:
-		c8.op2NNN()
-	case 0x3000:
-		c8.op3XKK()
-	case 0x4000:
-		c8.op4XKK()
-	case 0x5000:
-		c8.op5XY0()
-	case 0x6000:
-		c8.op6XKK()
-	case 0x7000:
-		c8.op7XKK()
-	case 0x8000:
-		switch c8.opcode & 0x000F {
-		case 0x0000:
-			c8.op8XY0()
-		case 0x0001:
-			c8.op8XY1()
-		case 0x0002:
-			c8.op8XY2()
-		case 0x0003:
-			c8.op8XY3()
-		case 0x0004:
-			c8.op8XY4()
-		case 0x0005:
-			c8.op8XY5()
-		case 0x0006:
-			c8.op8XY6()
-		case 0x0007:
-			c8.op8XY7()
-		case 0x000E:
-			c8.op8XYE()
-		}
-	case 0x9000:
-		c8.op9XY0()
-	case 0xA000:
-		c8.opANNN()
-	case 0xB000:
-		c8.opBNNN()
-	case 0xC000:
-		c8.opCXKK()
-	case 0xD000:
-		c8.opDXYN()
-		c8.draw()
-	case 0xE000:
-		switch c8.opcode & 0x00FF {
-		case 0x009E:
-			c8.opEX9E()
-		case 0x00A1:
-			c8.opEXA1()
-		}
-	case 0xF000:
-		switch c8.opcode & 0x00FF {
-		case 0x0007:
-			c8.opFX07()
-		case 0x000A:
-			c8.opFX0A()
-		case 0x0015:
-			c8.opFX15()
-		case 0x0018:
-			c8.opFX18()
-		case 0x001E:
-			c8.opFX1E()
-		case 0x0029:
-			c8.opFX29()
-		case 0x0033:
-			c8.opFX33()
-		case 0x0055:
-			c8.opFX55()
-		case 0x0065:
-			c8.opFX65()
-		}
-	default:
-		fmt.Printf("Invalid opcode: %#X\n", c8.opcode)
 
+	// Decodes the opcode and returns the corresponding function to call.
+	if handler := dispatchTable[c8.decodeOpcode()]; handler != nil {
+		handler(c8)
+	} else {
+		fmt.Printf("Invalid opcode: %#X\n", c8.opcode)
 	}
+
 	if c8.delayTimer > 0 {
 		c8.delayTimer--
 	}
@@ -346,6 +306,21 @@ func (c8 *Chip8) PrintMemoryStatus() {
 
 func (c8 *Chip8) GetDisplay() [32][64]uint8 {
 	return c8.display
+}
+
+// decodeOpcode decodes the the current opcode and returns the value.
+// Intended to be used for the dispatch map to find the corresponding functions which realizes the instruction.
+func (c8 *Chip8) decodeOpcode() uint16 {
+	switch c8.opcode & 0xF000 {
+	case 0x0000:
+		return c8.opcode & 0x00FF // 00E0, 00EE
+	case 0x8000:
+		return c8.opcode & 0xF00F // z.B. 8XY0
+	case 0xE000, 0xF000:
+		return c8.opcode & 0xF0FF // z.B. EX9E, FX07
+	default:
+		return c8.opcode & 0xF000 // z.B. 1000, 2000, etc.
+	}
 }
 
 // Clears the screen.
