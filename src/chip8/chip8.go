@@ -1,10 +1,12 @@
 package chip8
 
 import (
+	"encoding/binary"
 	"fmt"
-	"log"
+	"math"
 	"math/rand"
 	"os"
+	"time"
 
 	"github.com/veandco/go-sdl2/sdl"
 )
@@ -76,7 +78,7 @@ var dispatchTable = map[uint16]opcodeHandler{
 	0xA000: (*Chip8).opANNN,
 	0xB000: (*Chip8).opBNNN,
 	0xC000: (*Chip8).opCXKK,
-	0xD000: func(c8 *Chip8) { c8.opDXYN(); c8.draw() },
+	0xD000: (*Chip8).opDXYN,
 	0xE09E: (*Chip8).opEX9E,
 	0xE0A1: (*Chip8).opEXA1,
 	0xF007: (*Chip8).opFX07,
@@ -109,6 +111,43 @@ type Chip8 struct {
 	colorCodeBackground uint32
 }
 
+// Runs the Chip8 emulator with the given ROM and configuration.
+// Note that Run never returns unless there is an error.
+func (c8 *Chip8) Run(romPath string, scaleFactor int32, colorProfile string) error {
+
+	if err := c8.loadRom(romPath); err != nil {
+		return fmt.Errorf("failed to load ROM: %w", err)
+	}
+	// Fail early and try to load the rom first.
+	c8.Init(scaleFactor, colorProfile)
+
+	clock := time.NewTicker(time.Millisecond)
+	video := time.NewTicker(time.Second / 60)
+	sound := time.NewTicker(time.Second / 60)
+	delay := time.NewTicker(time.Second / 60)
+
+	for c8.Running() {
+		select {
+		case <-sound.C:
+			if c8.soundTimer > 0 {
+				c8.soundTimer--
+				c8.updateSound()
+			}
+		case <-delay.C:
+			if c8.delayTimer > 0 {
+				c8.delayTimer--
+			}
+		case <-video.C:
+			c8.draw()
+		case <-clock.C:
+			c8.cycle()
+		}
+	}
+
+	return nil
+
+}
+
 // Initializes the values of the Chip8 structure.
 // Sets the program counter to the start address.
 func (c8 *Chip8) Init(scaleFactor int32, colorProfile string) {
@@ -131,7 +170,7 @@ func (c8 *Chip8) Init(scaleFactor int32, colorProfile string) {
 		64*c8.scaleFactor, 32*c8.scaleFactor, sdl.WINDOW_SHOWN)
 
 	if err != nil {
-		fmt.Printf("An error occurred  while trying to create the SDL window: %v", err)
+		fmt.Printf("An error occurred while trying to create the SDL window: %v", err)
 		sdl.Quit()
 		os.Exit(-1)
 	}
@@ -155,53 +194,84 @@ func (c8 *Chip8) SetColorProfile(profileName string) {
 	}
 }
 
+var AudioDevice sdl.AudioDeviceID
+
+// ObtainedSpec is the spec opened for the device.
+var ObtainedSpec *sdl.AudioSpec
+
+func initAudio() {
+	var err error
+
+	// the desired audio specification
+	desiredSpec := &sdl.AudioSpec{
+		Freq:     64 * 60,
+		Format:   sdl.AUDIO_F32LSB,
+		Channels: 1,
+		Samples:  64,
+	}
+
+	ObtainedSpec = &sdl.AudioSpec{}
+
+	// open the device and start playing it
+	if sdl.GetNumAudioDevices(false) > 0 {
+		if AudioDevice, err = sdl.OpenAudioDevice("", false, desiredSpec, ObtainedSpec, sdl.AUDIO_ALLOW_ANY_CHANGE); err != nil {
+			panic(err)
+		}
+
+		sdl.PauseAudioDevice(AudioDevice, false)
+	}
+
+	fmt.Println(AudioDevice)
+	fmt.Println(ObtainedSpec)
+}
+
+func (c8 *Chip8) updateSound() {
+	if AudioDevice != 0 {
+		sample := make([]byte, 4)
+
+		binary.LittleEndian.PutUint32(sample, math.Float32bits(1.0))
+
+		// N channels, each channel has S samples (4 bytes each)
+		n := int(ObtainedSpec.Channels) * int(ObtainedSpec.Samples) * 4
+		data := make([]byte, n)
+
+		// 128 samples per 1/60 of a second
+		for i := 0; i < n; i += 4 {
+			copy(data[i:], sample)
+		}
+
+		if err := sdl.QueueAudio(AudioDevice, data); err != nil {
+			println(err)
+		}
+	}
+}
+
 func (c8 *Chip8) draw() {
 	surface, err := c8.sdlWindow.GetSurface()
 	if err != nil {
+		// TODO: Should not panic? Can we recover from the error or not?
 		panic(err)
 	}
 
-	for row, rows := range c8.display {
-		for column := range rows {
-			rect := sdl.Rect{X: (int32(column * int(c8.scaleFactor))), Y: (int32(row * int(c8.scaleFactor))), H: c8.scaleFactor, W: c8.scaleFactor}
-			if c8.display[row][column] == 0 {
-				surface.FillRect(&rect, c8.colorCodeBackground)
-			} else {
-				surface.FillRect(&rect, c8.colorCodeForeground)
+	bg := c8.colorCodeBackground
+	fg := c8.colorCodeForeground
+	scale := c8.scaleFactor
+
+	for row, rowVals := range c8.display {
+		y := int32(row) * scale
+		for col, pixel := range rowVals {
+			x := int32(col) * scale
+			color := bg
+			if pixel != 0 {
+				color = fg
 			}
+			rect := sdl.Rect{X: x, Y: y, W: scale, H: scale}
+			surface.FillRect(&rect, color)
 		}
 	}
 	c8.sdlWindow.UpdateSurface()
 }
 
-func (c8 *Chip8) DisplayDebugger() {
-	surface, err := c8.sdlWindow.GetSurface()
-
-	if err != nil {
-		panic(err)
-	}
-	for row, rows := range c8.display {
-		for column := range rows {
-			rect := sdl.Rect{X: (int32(column * 20)), Y: (int32(row * 20)), H: 20, W: 20}
-			if c8.display[row][column] == 0 {
-				if row%2 == 0 && column%2 == 0 {
-					surface.FillRect(&rect, 0xd9d9d9)
-				}
-				if row%2 == 0 && column%2 != 0 {
-					surface.FillRect(&rect, 0xFFFFFFFF)
-				}
-				if row%2 != 0 && column%2 == 0 {
-					surface.FillRect(&rect, 0xFFFFFFFF)
-				}
-				if row%2 != 0 && column%2 != 0 {
-					surface.FillRect(&rect, 0xd9d9d9)
-				}
-			} else {
-				surface.FillRect(&rect, 0x37FE65)
-			}
-		}
-	}
-}
 func (c8 *Chip8) keyHandler() {
 	for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
 		switch e := event.(type) {
@@ -220,8 +290,7 @@ func (c8 *Chip8) keyHandler() {
 	}
 }
 
-func (c8 *Chip8) Cycle() {
-
+func (c8 *Chip8) cycle() {
 	// Fetch
 	c8.opcode = ((uint16(c8.memory[c8.programCounter]) << 8) | uint16(c8.memory[c8.programCounter+1]))
 
@@ -237,13 +306,6 @@ func (c8 *Chip8) Cycle() {
 		fmt.Printf("Invalid opcode: %#X\n", c8.opcode)
 	}
 
-	if c8.delayTimer > 0 {
-		c8.delayTimer--
-	}
-
-	if c8.soundTimer > 0 {
-		c8.soundTimer--
-	}
 }
 
 func (c8 *Chip8) ShutDown() {
@@ -252,60 +314,29 @@ func (c8 *Chip8) ShutDown() {
 	sdl.Quit()
 }
 
-func (c8 *Chip8) LoadRom(pathToRom string) {
+func (c8 *Chip8) loadRom(pathToRom string) error {
 	f, err := os.Open(pathToRom)
 
 	if err != nil {
 		f.Close()
-		log.Fatalf("An error occurred while trying to open the ROM: %v\n", err)
+		return err
 	}
 
 	defer f.Close()
 
 	bytesRead, err := f.Read(c8.memory[startAddress:])
 
+	// TODO: Check the number of bytes read and tell the user when the ROM is too big? Etc.
+
 	if err != nil {
 		f.Close()
-		log.Fatalf("An error occurred while trying to read the ROM into memory: %v\n", err)
+		return fmt.Errorf("an error occurred while trying to read the ROM into memory: %w", err)
 	}
 
 	fmt.Println("[+] ROM successfully read into the memory.")
 	fmt.Println("[+] ROM size: ", bytesRead)
 
-}
-
-func (c8 *Chip8) PrintRegisters() {
-	for regIndex, regValue := range c8.registers {
-		fmt.Printf("%#X: %08b\t", regIndex, regValue)
-	}
-
-	fmt.Printf("\n\nIndex register: %#X\n", c8.indexRegister)
-}
-
-func (c8 *Chip8) PrintStatus() {
-	c8.PrintRegisters()
-
-	fmt.Printf("\nProgram counter: %#X\n", c8.programCounter)
-	fmt.Println("----------------------")
-	for stackIndex, stackValue := range c8.callStack {
-		if stackIndex == int(c8.stackPointer) {
-			fmt.Printf("|%#X: %#X   <---SP   |\n", stackIndex, stackValue)
-		} else {
-			fmt.Printf("|%#X: %#X            |\n", stackIndex, stackValue)
-		}
-	}
-	fmt.Println("----------------------")
-}
-
-func (c8 *Chip8) PrintMemoryStatus() {
-	var i uint16 = 0x200
-	for ; i < 612; i++ {
-		fmt.Printf("%#X: %#X\n", i, c8.memory[i])
-	}
-}
-
-func (c8 *Chip8) GetDisplay() [32][64]uint8 {
-	return c8.display
+	return nil
 }
 
 // decodeOpcode decodes the the current opcode and returns the value.
@@ -497,11 +528,7 @@ func (c8 *Chip8) op8XY7() {
 // Shift the register VX to the left. Sets the VF to one if the most significant bit is one.
 func (c8 *Chip8) op8XYE() {
 	var vx uint8 = uint8((c8.opcode & 0x0F00) >> 8)
-
 	c8.registers[0xF] = (c8.registers[vx] & uint8(0b10000000) >> 7)
-
-	fmt.Printf("Result: %#X\n", (c8.registers[vx] & 0b10000000))
-
 	c8.registers[vx] = c8.registers[vx] << 1
 }
 
