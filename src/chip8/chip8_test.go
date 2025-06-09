@@ -8,7 +8,7 @@ import (
 func TestLoadRom(t *testing.T) {
 	c8 := Chip8{}
 	const romSize int = 494
-	c8.LoadRom("../../roms/tetris.rom")
+	c8.loadRom("../../roms/tetris.rom")
 
 	tests := []struct {
 		testName string
@@ -46,9 +46,63 @@ func TestLoadRom(t *testing.T) {
 	}
 }
 
-// func FuzzLoadROM(f *testing.F) {
+func TestCycle(t *testing.T) {
+	tests := []struct {
+		name           string
+		memory         []byte
+		cycles         int
+		startPC        uint16
+		wantPC         uint16
+		wantRegisterV0 byte
+	}{
+		{
+			name:           "5x CLS (0x00E0) - PC should advance +10",
+			memory:         []byte{0x00, 0xE0, 0x00, 0xE0, 0x00, 0xE0, 0x00, 0xE0, 0x00, 0xE0},
+			cycles:         5,
+			startPC:        0x200,
+			wantPC:         0x20A,
+			wantRegisterV0: 0,
+		},
+		{
+			name:           "1x LD V0, 0x42 (0x6042) - V0 should be set to 0x42",
+			memory:         []byte{0x60, 0x42},
+			cycles:         1,
+			startPC:        0x200,
+			wantPC:         0x202,
+			wantRegisterV0: 0x42,
+		},
+		{
+			name:           "2x LD V0, 0x12; LD V0, 0x34",
+			memory:         []byte{0x60, 0x12, 0x60, 0x34},
+			cycles:         2,
+			startPC:        0x200,
+			wantPC:         0x204,
+			wantRegisterV0: 0x34,
+		},
+	}
 
-// }
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c8 := Chip8{}
+			c8.programCounter = tt.startPC
+
+			for i, b := range tt.memory {
+				c8.memory[0x200+uint16(i)] = b
+			}
+
+			for i := 0; i < tt.cycles; i++ {
+				c8.cycle()
+			}
+
+			if c8.programCounter != tt.wantPC {
+				t.Errorf("PC: got 0x%X, want 0x%X", c8.programCounter, tt.wantPC)
+			}
+			if c8.registers[0] != tt.wantRegisterV0 {
+				t.Errorf("V0: got 0x%X, want 0x%X", c8.registers[0], tt.wantRegisterV0)
+			}
+		})
+	}
+}
 
 func TestOP00E0(t *testing.T) {
 	c8 := Chip8{}
