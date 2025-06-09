@@ -2,50 +2,113 @@ package chip8
 
 import (
 	"fmt"
+	"os"
 	"testing"
 )
 
 func TestLoadRom(t *testing.T) {
-	c8 := Chip8{}
-	const romSize int = 494
-	c8.loadRom("../../roms/tetris.rom")
+	type testCase struct {
+		name        string
+		romData     []byte
+		romTooLarge bool
+		romMissing  bool
+		wantErr     bool
+		wantFirst   []byte
+		wantLast    []byte
+	}
 
-	tests := []struct {
-		testName string
-		want     [4]byte
-	}{
+	romFits := []byte{0xA2, 0xB4, 0x23, 0xE6, 0x00, 0xEE, 0x37, 0x23}
+	romTooBig := make([]byte, 4096-startAddress+1)
+	for i := range romTooBig {
+		romTooBig[i] = 0xFF
+	}
+
+	tests := []testCase{
 		{
-			"First four bytes",
-			[4]byte{0xA2, 0xB4, 0x23, 0xE6},
+			name:      "Valid ROM",
+			romData:   romFits,
+			wantErr:   false,
+			wantFirst: romFits[:4],
+			wantLast:  romFits[len(romFits)-4:],
 		},
 		{
-			"Last four bytes",
-			[4]byte{0x00, 0xEE, 0x37, 0x23},
+			name:        "ROM too large",
+			romData:     romTooBig,
+			romTooLarge: true,
+			wantErr:     true,
+		},
+		{
+			name:       "Missing ROM file",
+			romMissing: true,
+			wantErr:    true,
+		},
+		{
+			name:    "Empty ROM file",
+			romData: []byte{},
+			wantErr: false,
 		},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.testName, func(t *testing.T) {
+		t.Run(tt.name, func(t *testing.T) {
+			c8 := &Chip8{}
 
-			if tt.testName == "First four bytes" {
-				got := [4]byte{c8.memory[startAddress], c8.memory[startAddress+1], c8.memory[startAddress+2], c8.memory[startAddress+3]}
+			var romPath string
+			if tt.romMissing {
+				romPath = "nonexistent.rom"
+			} else {
+				tmpFile, err := os.CreateTemp("", "chip8romtest_*.rom")
+				if err != nil {
+					t.Fatalf("could not create temp file: %v", err)
+				}
+				defer os.Remove(tmpFile.Name())
+				if len(tt.romData) > 0 {
+					if _, err := tmpFile.Write(tt.romData); err != nil {
+						t.Fatalf("could not write to temp file: %v", err)
+					}
+				}
+				tmpFile.Close()
+				romPath = tmpFile.Name()
+			}
 
-				if got != tt.want {
-					t.Errorf("LoadRom(../roms/tetris.rom) - First four bytes -> got: %v, want: %v", got, tt.want)
+			err := c8.loadRom(romPath)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("expected error, got nil")
+				}
+				return
+			} else {
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+					return
 				}
 			}
 
-			if tt.testName == "Last four bytes" {
-				got := [4]byte{c8.memory[startAddress+romSize-4], c8.memory[startAddress+romSize-3], c8.memory[startAddress+romSize-2], c8.memory[startAddress+romSize-1]}
-
-				if got != tt.want {
-					t.Errorf("LoadRom(../roms/tetris.rom) - Last four bytes -> got: %v, want: %v", got, tt.want)
+			if len(tt.romData) >= 4 {
+				gotFirst := c8.memory[startAddress : startAddress+4]
+				if !equalBytes(gotFirst, tt.wantFirst) {
+					t.Errorf("first 4 bytes: got %v, want %v", gotFirst, tt.wantFirst)
+				}
+				gotLast := c8.memory[startAddress+len(tt.romData)-4 : startAddress+len(tt.romData)]
+				if !equalBytes(gotLast, tt.wantLast) {
+					t.Errorf("last 4 bytes: got %v, want %v", gotLast, tt.wantLast)
 				}
 			}
 		})
 	}
 }
 
+func equalBytes(a, b []byte) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
 func TestCycle(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -1573,6 +1636,93 @@ func TestOPFX29(t *testing.T) {
 			fmt.Println(c8.indexRegister)
 			if c8.indexRegister != tt.indexRegisterAfter {
 				t.Errorf("Expected the index register to be %#X but got %#X.", tt.indexRegisterAfter, c8.indexRegister)
+			}
+		})
+	}
+}
+func TestOpFX33(t *testing.T) {
+	type fields struct {
+		registers     [16]uint8
+		memory        [4096]uint8
+		indexRegister uint16
+		opcode        uint16
+	}
+	tests := []struct {
+		name           string
+		fields         fields
+		vx             uint8
+		expectedMemory [3]uint8 // [hundreds, tens, ones]
+	}{
+		{
+			name: "BCD of 123 at I = 100",
+			fields: fields{
+				registers:     [16]uint8{123},
+				indexRegister: 100,
+				opcode:        0xF033, // VX = 0
+			},
+			vx:             0,
+			expectedMemory: [3]uint8{1, 2, 3},
+		},
+		{
+			name: "BCD of 0 at I = 200",
+			fields: fields{
+				registers:     [16]uint8{0, 0},
+				indexRegister: 200,
+				opcode:        0xF133, // VX = 1
+			},
+			vx:             1,
+			expectedMemory: [3]uint8{0, 0, 0},
+		},
+		{
+			name: "BCD of 255 at I = 300",
+			fields: fields{
+				registers:     [16]uint8{0, 255},
+				indexRegister: 300,
+				opcode:        0xF133, // VX = 1
+			},
+			vx:             1,
+			expectedMemory: [3]uint8{2, 5, 5},
+		},
+		{
+			name: "BCD of 42 at I = 0",
+			fields: fields{
+				registers:     [16]uint8{0, 0, 42},
+				indexRegister: 0,
+				opcode:        0xF233, // VX = 2
+			},
+			vx:             2,
+			expectedMemory: [3]uint8{0, 4, 2},
+		},
+		{
+			name: "BCD of 99 at I = 4093 (near end of memory)",
+			fields: fields{
+				registers:     [16]uint8{99},
+				indexRegister: 4093,
+				opcode:        0xF033, // VX = 0
+			},
+			vx:             0,
+			expectedMemory: [3]uint8{0, 9, 9},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c8 := &Chip8{
+				registers:     tt.fields.registers,
+				memory:        tt.fields.memory,
+				indexRegister: tt.fields.indexRegister,
+				opcode:        tt.fields.opcode | (uint16(tt.vx) << 8),
+			}
+			c8.opFX33()
+
+			base := c8.indexRegister
+			got := [3]uint8{
+				c8.memory[base],
+				c8.memory[base+1],
+				c8.memory[base+2],
+			}
+			if got != tt.expectedMemory {
+				t.Errorf("BCD memory = %v, want %v", got, tt.expectedMemory)
 			}
 		})
 	}

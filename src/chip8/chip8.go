@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"math/rand"
 	"os"
-	"strconv"
 	"time"
 
 	"github.com/veandco/go-sdl2/sdl"
@@ -226,7 +225,6 @@ func (c8 *Chip8) cycle() {
 	c8.programCounter += 2
 
 	if handler := dispatchTable[c8.decodeOpcode()]; handler != nil {
-		fmt.Printf("Current OPCODE: %#X", c8.opcode)
 		handler(c8)
 	} else {
 		fmt.Printf("Invalid opcode: %#X\n", c8.opcode)
@@ -246,26 +244,20 @@ func (c8 *Chip8) ShutDown() {
 	sdl.Quit()
 }
 
+// loadRom loads the ROM from a given path into the CHIP8 memory.
 func (c8 *Chip8) loadRom(pathToRom string) error {
-	f, err := os.Open(pathToRom)
-
+	data, err := os.ReadFile(pathToRom)
 	if err != nil {
-		f.Close()
-		return err
+		return fmt.Errorf("could not open ROM file: %w", err)
 	}
 
-	defer f.Close()
-
-	bytesRead, err := f.Read(c8.memory[startAddress:])
-
-	// TODO: Check the number of bytes read and tell the user when the ROM is too big? Etc.
-	if err != nil {
-		f.Close()
-		return fmt.Errorf("an error occurred while trying to read the ROM into memory: %w", err)
+	if len(data) > len(c8.memory)-startAddress {
+		return fmt.Errorf("ROM (%d bytes) is too large for memory (%d bytes available)", len(data), len(c8.memory)-startAddress)
 	}
-	slog.Info("ROM successfully read into the memory")
-	slog.Info("ROM Size: " + strconv.Itoa(bytesRead) + " bytes")
 
+	copy(c8.memory[startAddress:], data)
+
+	slog.Info("ROM successfully loaded into memory", "size", len(data), "path", pathToRom)
 	return nil
 }
 
@@ -590,6 +582,8 @@ func (c8 *Chip8) opFX29() {
 }
 
 // Stores the BCD representation of VX in memory locations I, I+1 and I+2.
+// Takes the decimal value of VX, and places the hundreds digit in memory at location in I,
+// the tens digit at location I+1, and the ones digit at location I+2.
 func (c8 *Chip8) opFX33() {
 	var vx uint8 = uint8((c8.opcode & 0x0F00) >> 8)
 	var value uint8 = c8.registers[vx]
