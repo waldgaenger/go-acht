@@ -119,8 +119,8 @@ func (c8 *Chip8) Run(romPath string, scaleFactor int32, colorProfile string) err
 	if err := c8.loadRom(romPath); err != nil {
 		return fmt.Errorf("failed to load ROM: %w", err)
 	}
-	// Fail early and try to load the rom first.
-	c8.Init(scaleFactor, colorProfile)
+	// TODO: Error should be checked and not discarded.
+	c8.init(scaleFactor, colorProfile)
 
 	clock := time.NewTicker(time.Millisecond)
 	video := time.NewTicker(time.Second / 60)
@@ -132,7 +132,6 @@ func (c8 *Chip8) Run(romPath string, scaleFactor int32, colorProfile string) err
 		case <-sound.C:
 			if c8.soundTimer > 0 {
 				c8.soundTimer--
-				c8.updateSound()
 			}
 		case <-delay.C:
 			if c8.delayTimer > 0 {
@@ -151,18 +150,14 @@ func (c8 *Chip8) Run(romPath string, scaleFactor int32, colorProfile string) err
 
 // Initializes the values of the Chip8 structure.
 // Sets the program counter to the start address.
-func (c8 *Chip8) Init(scaleFactor int32, colorProfile string) {
+func (c8 *Chip8) init(scaleFactor int32, colorProfile string) error {
 	c8.programCounter = uint16(startAddress)
 	c8.scaleFactor = scaleFactor
 	// Loading the set of fonts into the specified memory area
-	for i := 0; i < fontSize; i++ {
-		c8.memory[fontStartAddress+i] = fontSet[i]
-	}
+	copy(c8.memory[fontStartAddress:], fontSet[:])
 
 	if err := sdl.Init(sdl.INIT_EVERYTHING); err != nil {
-		fmt.Printf("An error occurred while trying to initialize the SDL components: %v", err)
-		sdl.Quit()
-		os.Exit(-1)
+		return fmt.Errorf("SDL Init failed: %w", err)
 	}
 
 	c8.SetColorProfile(colorProfile)
@@ -171,12 +166,13 @@ func (c8 *Chip8) Init(scaleFactor int32, colorProfile string) {
 		64*c8.scaleFactor, 32*c8.scaleFactor, sdl.WINDOW_SHOWN)
 
 	if err != nil {
-		fmt.Printf("An error occurred while trying to create the SDL window: %v", err)
-		sdl.Quit()
-		os.Exit(-1)
+		return fmt.Errorf("SDL Window creation failed: %w", err)
 	}
+
 	c8.sdlWindow = window
 	c8.running = true
+
+	return nil
 }
 
 func (c8 *Chip8) Running() bool {
@@ -186,64 +182,10 @@ func (c8 *Chip8) Running() bool {
 // Sets the color profile specified by the user.
 func (c8 *Chip8) SetColorProfile(profileName string) {
 	if profile, ok := profiles[profileName]; ok {
-		c8.colorCodeBackground = profile.background
-		c8.colorCodeForeground = profile.foreground
+		c8.colorProfile = profile
 	} else {
 		// Default profile which is black-white
-		c8.colorCodeBackground = 0x000000 // black
-		c8.colorCodeForeground = 0xFFFFFF // white
-	}
-}
-
-var AudioDevice sdl.AudioDeviceID
-
-// ObtainedSpec is the spec opened for the device.
-var ObtainedSpec *sdl.AudioSpec
-
-func initAudio() {
-	var err error
-
-	// the desired audio specification
-	desiredSpec := &sdl.AudioSpec{
-		Freq:     64 * 60,
-		Format:   sdl.AUDIO_F32LSB,
-		Channels: 1,
-		Samples:  64,
-	}
-
-	ObtainedSpec = &sdl.AudioSpec{}
-
-	// open the device and start playing it
-	if sdl.GetNumAudioDevices(false) > 0 {
-		if AudioDevice, err = sdl.OpenAudioDevice("", false, desiredSpec, ObtainedSpec, sdl.AUDIO_ALLOW_ANY_CHANGE); err != nil {
-			panic(err)
-		}
-
-		sdl.PauseAudioDevice(AudioDevice, false)
-	}
-
-	fmt.Println(AudioDevice)
-	fmt.Println(ObtainedSpec)
-}
-
-func (c8 *Chip8) updateSound() {
-	if AudioDevice != 0 {
-		sample := make([]byte, 4)
-
-		binary.LittleEndian.PutUint32(sample, math.Float32bits(1.0))
-
-		// N channels, each channel has S samples (4 bytes each)
-		n := int(ObtainedSpec.Channels) * int(ObtainedSpec.Samples) * 4
-		data := make([]byte, n)
-
-		// 128 samples per 1/60 of a second
-		for i := 0; i < n; i += 4 {
-			copy(data[i:], sample)
-		}
-
-		if err := sdl.QueueAudio(AudioDevice, data); err != nil {
-			println(err)
-		}
+		c8.colorProfile = profiles["black-white"]
 	}
 }
 
@@ -254,8 +196,8 @@ func (c8 *Chip8) draw() {
 		panic(err)
 	}
 
-	bg := c8.colorCodeBackground
-	fg := c8.colorCodeForeground
+	bg := c8.colorProfile.background
+	fg := c8.colorProfile.foreground
 	scale := c8.scaleFactor
 
 	for row, rowVals := range c8.display {
@@ -294,9 +236,12 @@ func (c8 *Chip8) keyHandler() {
 // cycle carries out one full CPU cycle: fetches the next opcode, decodes it using the dispatch table, and executes the matching instruction handler.
 func (c8 *Chip8) cycle() {
 	c8.fetch()
+	c8.programCounter += 2
+
 	c8.keyHandler()
 
 	if handler := dispatchTable[c8.decodeOpcode()]; handler != nil {
+		fmt.Printf("Current OPCODE: %#X", c8.opcode)
 		handler(c8)
 	} else {
 		fmt.Printf("Invalid opcode: %#X\n", c8.opcode)
@@ -329,7 +274,6 @@ func (c8 *Chip8) loadRom(pathToRom string) error {
 	bytesRead, err := f.Read(c8.memory[startAddress:])
 
 	// TODO: Check the number of bytes read and tell the user when the ROM is too big? Etc.
-
 	if err != nil {
 		f.Close()
 		return fmt.Errorf("an error occurred while trying to read the ROM into memory: %w", err)
@@ -558,12 +502,12 @@ func (c8 *Chip8) opCXKK() {
 	var vx uint8 = uint8((c8.opcode & 0x0F00) >> 8)
 	var value uint8 = uint8(c8.opcode & 0x00FF)
 
-	c8.registers[vx] = uint8(rand.Intn(255)) & value
-
+	c8.registers[vx] = uint8(rand.Intn(256)) & value
 }
 
 // Draws the next n bytes from the position of the index register at position (VX, VY).
 func (c8 *Chip8) opDXYN() {
+	// TODO: Refactor and beautify; make it more readable.
 	xPos := c8.registers[(c8.opcode&0x0F00)>>8]
 	yPos := c8.registers[(c8.opcode&0x00F0)>>4]
 	height := c8.opcode & 0x000F
@@ -575,12 +519,11 @@ func (c8 *Chip8) opDXYN() {
 		pixel := c8.memory[c8.indexRegister+j]
 		for i := uint16(0); i < 8; i++ {
 			if (pixel & (0x80 >> i)) != 0 {
-
 				// Checks for collision
-				if c8.display[(yPos+uint8(j))%32][(xPos+uint8(i))%64] == 1 {
+				if c8.display[(yPos+uint8(j))%32][(xPos+uint8(i))%64] == 1 { // TODO: Remove magic numbers
 					c8.registers[0xF] = 1
 				}
-				c8.display[(yPos+uint8(j))%32][(xPos+uint8(i))%64] ^= 1
+				c8.display[(yPos+uint8(j))%32][(xPos+uint8(i))%64] ^= 1 // TODO: Remove magic numbers
 			}
 		}
 	}
@@ -608,14 +551,14 @@ func (c8 *Chip8) opEXA1() {
 	}
 }
 
-// Set the value of register VX to the value of the dalay timer.
+// Sets the value of register VX to the value of the dalay timer.
 func (c8 *Chip8) opFX07() {
 	var vx uint8 = uint8((c8.opcode & 0x0F00) >> 8)
 
 	c8.registers[vx] = c8.delayTimer
 }
 
-// Wait for a key press and store the value of the key in VX
+// Waits for a key press and store the value of the key in VX
 func (c8 *Chip8) opFX0A() {
 	var vx uint8 = uint8((c8.opcode & 0x0F00) >> 8)
 	pressed := false
@@ -652,7 +595,7 @@ func (c8 *Chip8) opFX1E() {
 	c8.indexRegister += uint16(c8.registers[vx])
 }
 
-// Set the index register to the digit that is stored in VX.
+// Sets the index register to the digit that is stored in VX.
 func (c8 *Chip8) opFX29() {
 	var vx uint8 = uint8((c8.opcode & 0x0F00) >> 8)
 	var digit uint8 = c8.registers[vx]
@@ -676,7 +619,7 @@ func (c8 *Chip8) opFX33() {
 
 }
 
-// 0xFX65 Fills V0 to VX (including VX) with values from memory starting at address I. I is increased by 1
+// Fills V0 to VX (including VX) with values from memory starting at address I. I is increased by 1
 func (c8 *Chip8) opFX55() {
 	var vx uint8 = uint8((c8.opcode & 0x0F00) >> 8)
 
@@ -688,7 +631,7 @@ func (c8 *Chip8) opFX55() {
 	c8.indexRegister = ((c8.opcode & 0x0F00) >> 8) + 1
 }
 
-// Read into registers V0 - VX from memory starting at location I.
+// Reads into registers V0 - VX from memory starting at location I.
 func (c8 *Chip8) opFX65() {
 	var vx uint8 = uint8((c8.opcode & 0x0F00) >> 8)
 
