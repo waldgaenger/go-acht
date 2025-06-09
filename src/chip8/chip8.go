@@ -55,6 +55,7 @@ var keyMap = map[sdl.Keycode]uint8{
 
 type opcodeHandler func(*Chip8)
 
+// The dispatch table points to all the supported operations of the Chip8-Emulator.
 var dispatchTable = map[uint16]opcodeHandler{
 	0x00E0: (*Chip8).op00E0,
 	0x00EE: (*Chip8).op00EE,
@@ -290,22 +291,23 @@ func (c8 *Chip8) keyHandler() {
 	}
 }
 
+// cycle carries out one full CPU cycle: fetches the next opcode, decodes it using the dispatch table, and executes the matching instruction handler.
 func (c8 *Chip8) cycle() {
-	// Fetch
-	c8.opcode = ((uint16(c8.memory[c8.programCounter]) << 8) | uint16(c8.memory[c8.programCounter+1]))
-
-	c8.programCounter += 2
-
-	// Key handling
+	c8.fetch()
 	c8.keyHandler()
 
-	// Decodes the opcode and returns the corresponding function to call.
 	if handler := dispatchTable[c8.decodeOpcode()]; handler != nil {
 		handler(c8)
 	} else {
 		fmt.Printf("Invalid opcode: %#X\n", c8.opcode)
 	}
 
+}
+
+func (c8 *Chip8) fetch() {
+	hi := uint16(c8.memory[c8.programCounter])
+	lo := uint16(c8.memory[c8.programCounter+1])
+	c8.opcode = (hi << 8) | lo
 }
 
 func (c8 *Chip8) ShutDown() {
