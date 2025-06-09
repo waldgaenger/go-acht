@@ -2,13 +2,14 @@ package chip8
 
 import (
 	"fmt"
+	"image/color"
 	"log/slog"
 	"math/rand"
 	"os"
 	"time"
 
-	"github.com/veandco/go-sdl2/sdl"
 	"github.com/waldgaenger/go-acht/src/input"
+	"github.com/waldgaenger/go-acht/src/renderer"
 )
 
 const startAddress int = 0x200
@@ -36,15 +37,15 @@ var fontSet = [80]byte{
 }
 
 type colorProfile struct {
-	background uint32
-	foreground uint32
+	foreground color.RGBA
+	background color.RGBA
 }
 
 var profiles = map[string]colorProfile{
-	"black-white": {0x000000, 0xFFFFFF},
-	"night-sky":   {0x000044, 0xFFFFCC},
-	"console":     {0x000000, 0x22EE22},
-	"honey":       {0x996600, 0xFFCC00},
+	"black-white": {color.RGBA{0, 0, 0, 255}, color.RGBA{255, 255, 255, 255}},
+	"night-sky":   {color.RGBA{0, 0, 68, 255}, color.RGBA{255, 255, 204, 255}},
+	"console":     {color.RGBA{0, 0, 0, 255}, color.RGBA{34, 238, 34, 255}},
+	"honey":       {color.RGBA{153, 102, 0, 255}, color.RGBA{255, 204, 0, 255}},
 }
 
 type opcodeHandler func(*Chip8)
@@ -97,15 +98,14 @@ type Chip8 struct {
 	stackPointer   uint8
 	opcode         uint16
 	keyPad         [16]uint8
-	delayTimer     uint8 // The delay timer is decremented at a rate of 60 Hz according to the specification.
-	soundTimer     uint8 // The sound timer is decremented at a rate of 60 Hz according to the specification.
-	// TODO: Should be replaced with a bool type since the CHIP8 only supports boolean values and 0-255 is confusing.
-	display      [32][64]bool // 64x32 monochrome display
-	sdlWindow    *sdl.Window  // Stores the corresponding SDL main window
-	scaleFactor  int32        // Holds the scaling factor of the display
-	running      bool         // Indicates whether the emulator is running
-	colorProfile colorProfile // Holds the color of the foreground and the background color
-	Input        input.InputHandler
+	delayTimer     uint8        // The delay timer is decremented at a rate of 60 Hz according to the specification.
+	soundTimer     uint8        // The sound timer is decremented at a rate of 60 Hz according to the specification.
+	display        [32][64]bool // 64x32 monochrome display
+	scaleFactor    int32        // Holds the scaling factor of the display
+	running        bool         // Indicates whether the emulator is running
+	colorProfile   colorProfile // Holds the color of the foreground and the background color
+	Input          input.InputHandler
+	Renderer       renderer.Renderer
 }
 
 // Runs the Chip8 emulator with the given ROM and configuration.
@@ -150,23 +150,10 @@ func (c8 *Chip8) Run(romPath string, scaleFactor int32, colorProfile string) err
 func (c8 *Chip8) init(scaleFactor int32, colorProfile string) error {
 	c8.programCounter = uint16(startAddress)
 	c8.scaleFactor = scaleFactor
+	c8.SetColorProfile(colorProfile)
 	// Loading the set of fonts into the specified memory area
 	copy(c8.memory[fontStartAddress:], fontSet[:])
 
-	if err := sdl.Init(sdl.INIT_EVERYTHING); err != nil {
-		return fmt.Errorf("SDL Init failed: %w", err)
-	}
-
-	c8.SetColorProfile(colorProfile)
-
-	window, err := sdl.CreateWindow("CHIP8 EMULATOR", sdl.WINDOWPOS_UNDEFINED, sdl.WINDOWPOS_UNDEFINED,
-		64*c8.scaleFactor, 32*c8.scaleFactor, sdl.WINDOW_SHOWN)
-
-	if err != nil {
-		return fmt.Errorf("SDL Window creation failed: %w", err)
-	}
-
-	c8.sdlWindow = window
 	c8.running = true
 
 	return nil
@@ -187,29 +174,7 @@ func (c8 *Chip8) SetColorProfile(profileName string) {
 }
 
 func (c8 *Chip8) draw() {
-	surface, err := c8.sdlWindow.GetSurface()
-	if err != nil {
-		// TODO: Should not panic? Can we recover from the error or not?
-		panic(err)
-	}
-
-	bg := c8.colorProfile.background
-	fg := c8.colorProfile.foreground
-	scale := c8.scaleFactor
-
-	for row, rowVals := range c8.display {
-		y := int32(row) * scale
-		for col, pixel := range rowVals {
-			x := int32(col) * scale
-			color := bg
-			if pixel != false {
-				color = fg
-			}
-			rect := sdl.Rect{X: x, Y: y, W: scale, H: scale}
-			surface.FillRect(&rect, color)
-		}
-	}
-	c8.sdlWindow.UpdateSurface()
+	c8.Renderer.Draw(c8.display, c8.colorProfile.foreground, c8.colorProfile.background)
 }
 
 func (c8 *Chip8) updateInput() {
@@ -217,6 +182,13 @@ func (c8 *Chip8) updateInput() {
 	if quit {
 		c8.running = false
 	}
+}
+
+// fetch fetches the next instruction from the memory and sets the opcode accordingly.
+func (c8 *Chip8) fetch() {
+	hi := uint16(c8.memory[c8.programCounter])
+	lo := uint16(c8.memory[c8.programCounter+1])
+	c8.opcode = (hi << 8) | lo
 }
 
 // cycle carries out one full CPU cycle: fetches the next opcode, decodes it using the dispatch table, and executes the matching instruction handler.
@@ -230,18 +202,6 @@ func (c8 *Chip8) cycle() {
 		fmt.Printf("Invalid opcode: %#X\n", c8.opcode)
 	}
 
-}
-
-func (c8 *Chip8) fetch() {
-	hi := uint16(c8.memory[c8.programCounter])
-	lo := uint16(c8.memory[c8.programCounter+1])
-	c8.opcode = (hi << 8) | lo
-}
-
-func (c8 *Chip8) ShutDown() {
-	c8.running = false
-	c8.sdlWindow.Destroy()
-	sdl.Quit()
 }
 
 // loadRom loads the ROM from a given path into the CHIP8 memory.
@@ -278,7 +238,7 @@ func (c8 *Chip8) decodeOpcode() uint16 {
 
 // Clears the display by resetting all pixels to 0.
 func (c8 *Chip8) op00E0() {
-	c8.display = [32][64]bool{} // TODO: Should be a bool.
+	c8.display = [32][64]bool{}
 }
 
 // Returns from a subroutine.
@@ -496,11 +456,12 @@ func (c8 *Chip8) opDXYN() {
 		pixel := c8.memory[c8.indexRegister+j]
 		for i := uint16(0); i < 8; i++ {
 			if (pixel & (0x80 >> i)) != 0 {
+				// TODO: Should be simplied!
 				// Checks for collision
-				if c8.display[(yPos+uint8(j))%32][(xPos+uint8(i))%64] == true { // TODO: Remove magic numbers
+				if c8.display[(yPos+uint8(j))%displayHeight][(xPos+uint8(i))%displayWidth] == true { // TODO: Remove magic numbers
 					c8.registers[0xF] = 1
 				}
-				c8.display[(yPos+uint8(j))%32][(xPos+uint8(i))%64] = !c8.display[(yPos+uint8(j))%32][(xPos+uint8(i))%64] // TODO: Remove magic numbers
+				c8.display[(yPos+uint8(j))%displayHeight][(xPos+uint8(i))%displayWidth] = !c8.display[(yPos+uint8(j))%displayHeight][(xPos+uint8(i))%displayWidth] // TODO: Remove magic numbers
 			}
 		}
 	}
