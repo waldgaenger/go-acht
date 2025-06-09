@@ -9,11 +9,13 @@ import (
 	"time"
 
 	"github.com/veandco/go-sdl2/sdl"
+	"github.com/waldgaenger/go-acht/src/input"
 )
 
 const startAddress int = 0x200
 const fontStartAddress int = 0x50
-const fontSize int = 80
+const displayWidth = 64
+const displayHeight = 32
 
 var fontSet = [80]byte{
 	0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
@@ -44,13 +46,6 @@ var profiles = map[string]colorProfile{
 	"night-sky":   {0x000044, 0xFFFFCC},
 	"console":     {0x000000, 0x22EE22},
 	"honey":       {0x996600, 0xFFCC00},
-}
-
-var keyMap = map[sdl.Keycode]uint8{
-	sdl.K_1: 0x1, sdl.K_2: 0x2, sdl.K_3: 0x3, sdl.K_4: 0xC,
-	sdl.K_q: 0x4, sdl.K_w: 0x5, sdl.K_e: 0x6, sdl.K_r: 0xD,
-	sdl.K_a: 0x7, sdl.K_s: 0x8, sdl.K_d: 0x9, sdl.K_f: 0xE,
-	sdl.K_z: 0xA, sdl.K_x: 0x0, sdl.K_c: 0xB, sdl.K_v: 0xF,
 }
 
 type opcodeHandler func(*Chip8)
@@ -93,23 +88,25 @@ var dispatchTable = map[uint16]opcodeHandler{
 	0xF065: (*Chip8).opFX65,
 }
 
+// TODO: Decouple the Chip8 from the SDL library by abstracting the window and display away.
 type Chip8 struct {
-	registers           [16]uint8 // All 16 registers of the emulator
-	memory              [4096]uint8
-	programCounter      uint16
-	indexRegister       uint16
-	callStack           [16]uint16
-	stackPointer        uint8
-	opcode              uint16
-	keyPad              [16]uint8
-	delayTimer          uint8         // The delay timer is decremented at a rate of 60 Hz according to the specification.
-	soundTimer          uint8         // The sound timer is decremented at a rate of 60 Hz according to the specification.
-	display             [32][64]uint8 // 64x32 monochrome display
-	sdlWindow           *sdl.Window   // Stores the corresponding SDL main window
-	scaleFactor         int32
-	running             bool // Indicates whether the emulator is running
-	colorCodeForeground uint32
-	colorCodeBackground uint32
+	registers      [16]uint8   // All 16 registers of the emulator
+	memory         [4096]uint8 // 4096 Bytes of RAM
+	programCounter uint16      // Holds the next instruction
+	indexRegister  uint16
+	callStack      [16]uint16
+	stackPointer   uint8
+	opcode         uint16
+	keyPad         [16]uint8
+	delayTimer     uint8 // The delay timer is decremented at a rate of 60 Hz according to the specification.
+	soundTimer     uint8 // The sound timer is decremented at a rate of 60 Hz according to the specification.
+	// TODO: Should be replaced with a bool type since the CHIP8 only supports boolean values and 0-255 is confusing.
+	display      [32][64]uint8 // 64x32 monochrome display
+	sdlWindow    *sdl.Window   // Stores the corresponding SDL main window
+	scaleFactor  int32         // Holds the scaling factor of the display
+	running      bool          // Indicates whether the emulator is running
+	colorProfile colorProfile  // Holds the color of the foreground and the background color
+	Input        input.InputHandler
 }
 
 // Runs the Chip8 emulator with the given ROM and configuration.
@@ -140,6 +137,7 @@ func (c8 *Chip8) Run(romPath string, scaleFactor int32, colorProfile string) err
 		case <-video.C:
 			c8.draw()
 		case <-clock.C:
+			c8.updateInput()
 			c8.cycle()
 		}
 	}
@@ -215,21 +213,10 @@ func (c8 *Chip8) draw() {
 	c8.sdlWindow.UpdateSurface()
 }
 
-func (c8 *Chip8) keyHandler() {
-	for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
-		switch e := event.(type) {
-		case *sdl.QuitEvent:
-			c8.running = false
-		case *sdl.KeyboardEvent:
-			if idx, ok := keyMap[e.Keysym.Sym]; ok {
-				switch e.Type {
-				case sdl.KEYDOWN:
-					c8.keyPad[idx] = 1
-				case sdl.KEYUP:
-					c8.keyPad[idx] = 0
-				}
-			}
-		}
+func (c8 *Chip8) updateInput() {
+	quit := c8.Input.PollKeys(&c8.keyPad)
+	if quit {
+		c8.running = false
 	}
 }
 
@@ -237,8 +224,6 @@ func (c8 *Chip8) keyHandler() {
 func (c8 *Chip8) cycle() {
 	c8.fetch()
 	c8.programCounter += 2
-
-	c8.keyHandler()
 
 	if handler := dispatchTable[c8.decodeOpcode()]; handler != nil {
 		fmt.Printf("Current OPCODE: %#X", c8.opcode)
