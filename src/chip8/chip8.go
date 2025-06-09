@@ -356,14 +356,9 @@ func (c8 *Chip8) decodeOpcode() uint16 {
 	}
 }
 
-// Clears the screen.
-// Sets all values of the display to 0.
+// Clears the display by resetting all pixels to 0.
 func (c8 *Chip8) op00E0() {
-	for i, arr := range c8.display {
-		for j := range arr {
-			c8.display[i][j] = 0
-		}
-	}
+	c8.display = [32][64]uint8{} // TODO: Should be a bool.
 }
 
 // Returns from a subroutine.
