@@ -1,11 +1,11 @@
 package chip8
 
 import (
-	"encoding/binary"
 	"fmt"
-	"math"
+	"log/slog"
 	"math/rand"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/veandco/go-sdl2/sdl"
@@ -334,9 +334,8 @@ func (c8 *Chip8) loadRom(pathToRom string) error {
 		f.Close()
 		return fmt.Errorf("an error occurred while trying to read the ROM into memory: %w", err)
 	}
-
-	fmt.Println("[+] ROM successfully read into the memory.")
-	fmt.Println("[+] ROM size: ", bytesRead)
+	slog.Info("ROM successfully read into the memory")
+	slog.Info("ROM Size: " + strconv.Itoa(bytesRead) + " bytes")
 
 	return nil
 }
