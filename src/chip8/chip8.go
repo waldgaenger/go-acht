@@ -100,11 +100,11 @@ type Chip8 struct {
 	delayTimer     uint8 // The delay timer is decremented at a rate of 60 Hz according to the specification.
 	soundTimer     uint8 // The sound timer is decremented at a rate of 60 Hz according to the specification.
 	// TODO: Should be replaced with a bool type since the CHIP8 only supports boolean values and 0-255 is confusing.
-	display      [32][64]uint8 // 64x32 monochrome display
-	sdlWindow    *sdl.Window   // Stores the corresponding SDL main window
-	scaleFactor  int32         // Holds the scaling factor of the display
-	running      bool          // Indicates whether the emulator is running
-	colorProfile colorProfile  // Holds the color of the foreground and the background color
+	display      [32][64]bool // 64x32 monochrome display
+	sdlWindow    *sdl.Window  // Stores the corresponding SDL main window
+	scaleFactor  int32        // Holds the scaling factor of the display
+	running      bool         // Indicates whether the emulator is running
+	colorProfile colorProfile // Holds the color of the foreground and the background color
 	Input        input.InputHandler
 }
 
@@ -202,7 +202,7 @@ func (c8 *Chip8) draw() {
 		for col, pixel := range rowVals {
 			x := int32(col) * scale
 			color := bg
-			if pixel != 0 {
+			if pixel != false {
 				color = fg
 			}
 			rect := sdl.Rect{X: x, Y: y, W: scale, H: scale}
@@ -278,7 +278,7 @@ func (c8 *Chip8) decodeOpcode() uint16 {
 
 // Clears the display by resetting all pixels to 0.
 func (c8 *Chip8) op00E0() {
-	c8.display = [32][64]uint8{} // TODO: Should be a bool.
+	c8.display = [32][64]bool{} // TODO: Should be a bool.
 }
 
 // Returns from a subroutine.
@@ -497,10 +497,10 @@ func (c8 *Chip8) opDXYN() {
 		for i := uint16(0); i < 8; i++ {
 			if (pixel & (0x80 >> i)) != 0 {
 				// Checks for collision
-				if c8.display[(yPos+uint8(j))%32][(xPos+uint8(i))%64] == 1 { // TODO: Remove magic numbers
+				if c8.display[(yPos+uint8(j))%32][(xPos+uint8(i))%64] == true { // TODO: Remove magic numbers
 					c8.registers[0xF] = 1
 				}
-				c8.display[(yPos+uint8(j))%32][(xPos+uint8(i))%64] ^= 1 // TODO: Remove magic numbers
+				c8.display[(yPos+uint8(j))%32][(xPos+uint8(i))%64] = !c8.display[(yPos+uint8(j))%32][(xPos+uint8(i))%64] // TODO: Remove magic numbers
 			}
 		}
 	}

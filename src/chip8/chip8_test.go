@@ -172,7 +172,7 @@ func TestOP00E0(t *testing.T) {
 
 	for i, arr := range c8.display {
 		for j := range arr {
-			c8.display[i][j] = 1
+			c8.display[i][j] = true
 		}
 	}
 
@@ -181,7 +181,7 @@ func TestOP00E0(t *testing.T) {
 	t.Run("OP00E0: Clearing the screen", func(t *testing.T) {
 		for i, arr := range c8.display {
 			for j := range arr {
-				if c8.display[i][j] != 0 {
+				if c8.display[i][j] != false {
 					t.Errorf("Expected all values to be zero but pixel [%d][%d] was not zero.", i, j)
 				}
 			}
