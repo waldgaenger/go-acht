@@ -103,6 +103,8 @@ type Chip8 struct {
 	display        [32][64]bool // 64x32 monochrome display
 	scaleFactor    int32        // Holds the scaling factor of the display
 	running        bool         // Indicates whether the emulator is running
+	drawed         bool
+	cleared        bool
 	colorProfile   colorProfile // Holds the color of the foreground and the background color
 	Input          input.InputHandler
 	Renderer       renderer.Renderer
@@ -134,7 +136,15 @@ func (c8 *Chip8) Run(romPath string, scaleFactor int32, colorProfile string) err
 				c8.delayTimer--
 			}
 		case <-video.C:
-			c8.draw()
+			if c8.cleared {
+				c8.cleared = false
+				c8.Renderer.Clear(c8.display, c8.colorProfile.background)
+				fmt.Println("Cleared")
+			}
+			if c8.drawed {
+				c8.draw()
+				c8.drawed = false
+			}
 		case <-clock.C:
 			c8.updateInput()
 			c8.cycle()
@@ -235,6 +245,7 @@ func (c8 *Chip8) decodeOpcode() uint16 {
 
 // Clears the display by resetting all pixels to 0.
 func (c8 *Chip8) op00E0() {
+	c8.cleared = true
 	c8.display = [32][64]bool{}
 }
 
@@ -419,7 +430,6 @@ func (c8 *Chip8) op9XY0() {
 // Sets the index register to NNN.
 func (c8 *Chip8) opANNN() {
 	var address uint16 = c8.opcode & 0x0FFF
-
 	c8.indexRegister = address
 }
 
@@ -428,7 +438,6 @@ func (c8 *Chip8) opBNNN() {
 	var address uint16 = c8.opcode & 0x0FFF
 
 	c8.programCounter = uint16(c8.registers[0x0]) + uint16((address))
-
 }
 
 // Stores the result of a random byte & KK in VX.
@@ -441,24 +450,25 @@ func (c8 *Chip8) opCXKK() {
 
 // Draws the next n bytes from the position of the index register at position (VX, VY).
 func (c8 *Chip8) opDXYN() {
-	// TODO: Refactor and beautify; make it more readable.
-	xPos := c8.registers[(c8.opcode&0x0F00)>>8]
-	yPos := c8.registers[(c8.opcode&0x00F0)>>4]
+	x := c8.registers[(c8.opcode&0x0F00)>>8]
+	y := c8.registers[(c8.opcode&0x00F0)>>4]
 	height := c8.opcode & 0x000F
 
-	// Resets the collision register
-	c8.registers[0xF] = 0
+	c8.registers[0xF] = 0 // Resets collision flag
 
-	for j := uint16(0); j < height; j++ {
-		pixel := c8.memory[c8.indexRegister+j]
-		for i := uint16(0); i < 8; i++ {
-			if (pixel & (0x80 >> i)) != 0 {
-				// TODO: Should be simplied!
-				// Checks for collision
-				if c8.display[(yPos+uint8(j))%displayHeight][(xPos+uint8(i))%displayWidth] == true { // TODO: Remove magic numbers
+	for row := uint16(0); row < height; row++ {
+		spriteByte := c8.memory[c8.indexRegister+row]
+		for col := uint16(0); col < 8; col++ {
+			if (spriteByte & (0x80 >> col)) != 0 {
+				dx := (uint16(x) + col) % displayWidth
+				dy := (uint16(y) + row) % displayHeight
+
+				// Detect collision
+				if c8.display[dy][dx] {
 					c8.registers[0xF] = 1
 				}
-				c8.display[(yPos+uint8(j))%displayHeight][(xPos+uint8(i))%displayWidth] = !c8.display[(yPos+uint8(j))%displayHeight][(xPos+uint8(i))%displayWidth] // TODO: Remove magic numbers
+				// XOR pixel
+				c8.display[dy][dx] = c8.display[dy][dx] != true
 			}
 		}
 	}
