@@ -42,7 +42,7 @@ type colorProfile struct {
 }
 
 var profiles = map[string]colorProfile{
-	"black-white": {color.RGBA{0, 0, 0, 255}, color.RGBA{255, 255, 255, 255}},
+	"black-white": {color.RGBA{255, 255, 255, 255}, color.RGBA{0, 0, 0, 255}},
 	"night-sky":   {color.RGBA{0, 0, 68, 255}, color.RGBA{255, 255, 204, 255}},
 	"console":     {color.RGBA{0, 0, 0, 255}, color.RGBA{34, 238, 34, 255}},
 	"honey":       {color.RGBA{153, 102, 0, 255}, color.RGBA{255, 204, 0, 255}},
