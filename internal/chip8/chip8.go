@@ -8,8 +8,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/waldgaenger/go-acht/src/input"
-	"github.com/waldgaenger/go-acht/src/renderer"
+	"github.com/waldgaenger/go-acht/internal/input"
+	"github.com/waldgaenger/go-acht/internal/renderer"
 )
 
 const startAddress int = 0x200
@@ -109,7 +109,7 @@ type Chip8 struct {
 }
 
 // Runs the Chip8 emulator with the given ROM and configuration.
-// Note that Run never returns unless there is an error.
+// Note that Run never returns unless there the renderer indicates a quit or there is an error.
 func (c8 *Chip8) Run(romPath string, scaleFactor int32, colorProfile string) error {
 
 	if err := c8.loadRom(romPath); err != nil {
@@ -146,8 +146,7 @@ func (c8 *Chip8) Run(romPath string, scaleFactor int32, colorProfile string) err
 }
 
 // Initializes the values of the Chip8 structure.
-// Sets the program counter to the start address.
-func (c8 *Chip8) init(scaleFactor int32, colorProfile string) error {
+func (c8 *Chip8) init(scaleFactor int32, colorProfile string) {
 	c8.programCounter = uint16(startAddress)
 	c8.scaleFactor = scaleFactor
 	c8.SetColorProfile(colorProfile)
@@ -155,8 +154,6 @@ func (c8 *Chip8) init(scaleFactor int32, colorProfile string) error {
 	copy(c8.memory[fontStartAddress:], fontSet[:])
 
 	c8.running = true
-
-	return nil
 }
 
 func (c8 *Chip8) Running() bool {
@@ -226,13 +223,13 @@ func (c8 *Chip8) loadRom(pathToRom string) error {
 func (c8 *Chip8) decodeOpcode() uint16 {
 	switch c8.opcode & 0xF000 {
 	case 0x0000:
-		return c8.opcode & 0x00FF // 00E0, 00EE
+		return c8.opcode & 0x00FF // e.g. 00E0, 00EE
 	case 0x8000:
-		return c8.opcode & 0xF00F // z.B. 8XY0
+		return c8.opcode & 0xF00F // e.g. 8XY0
 	case 0xE000, 0xF000:
-		return c8.opcode & 0xF0FF // z.B. EX9E, FX07
+		return c8.opcode & 0xF0FF // e.g. EX9E, FX07
 	default:
-		return c8.opcode & 0xF000 // z.B. 1000, 2000, etc.
+		return c8.opcode & 0xF000 // e.g. 1000, 2000, etc.
 	}
 }
 
