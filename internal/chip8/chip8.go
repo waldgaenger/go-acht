@@ -268,8 +268,19 @@ func (c8 *Chip8) op1NNN() {
 func (c8 *Chip8) op2NNN() {
 	var address uint16 = c8.opcode & 0x0FFF
 
-	c8.callStack[c8.stackPointer] = c8.programCounter
+	// Stack overflow protection
+	if c8.stackPointer >= uint8(len(c8.callStack)) {
+		fmt.Printf(
+			"Stack overflow at PC=0x%03X (stackPointer=%d, stack size=%d).\n"+
+				"Too many nested CALLs. Emulation halted.\n"+
+				"Check your ROM for infinite or excessive recursion.",
+			c8.programCounter, c8.stackPointer, len(c8.callStack),
+		)
+		c8.running = false
+		return
+	}
 
+	c8.callStack[c8.stackPointer] = c8.programCounter
 	c8.stackPointer += 1
 
 	c8.programCounter = address
