@@ -206,7 +206,7 @@ func (c8 *Chip8) cycle() {
 	if handler := dispatchTable[c8.decodeOpcode()]; handler != nil {
 		handler(c8)
 	} else {
-		fmt.Printf("Invalid opcode: %#X\n", c8.opcode)
+		fmt.Printf("Invalid opcode: %#04X\n", c8.opcode)
 	}
 
 }
