@@ -148,7 +148,6 @@ func TestCycle(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c8 := Chip8{}
 			c8.programCounter = tt.startPC
-
 			for i, b := range tt.memory {
 				c8.memory[0x200+uint16(i)] = b
 			}
@@ -1723,6 +1722,64 @@ func TestOpFX33(t *testing.T) {
 			}
 			if got != tt.expectedMemory {
 				t.Errorf("BCD memory = %v, want %v", got, tt.expectedMemory)
+			}
+		})
+	}
+}
+func TestOpFX55(t *testing.T) {
+
+	tests := []struct {
+		testName          string
+		vx                uint8
+		indexRegister     uint16
+		registers         [16]uint8
+		wantMemory        []uint8
+		wantIndexRegister uint16
+	}{
+		{
+			testName:          "Save V0 at I",
+			vx:                0,
+			indexRegister:     0x300,
+			registers:         [16]uint8{0xAA},
+			wantMemory:        []uint8{0xAA},
+			wantIndexRegister: 1, // ((0 << 8) + 1)
+		},
+		{
+			testName:          "Save V0 to V2 at I",
+			vx:                2,
+			indexRegister:     0x400,
+			registers:         [16]uint8{0x01, 0x02, 0x03},
+			wantMemory:        []uint8{0x01, 0x02, 0x03},
+			wantIndexRegister: 3, // ((2 << 8) + 1)
+		},
+		{
+			testName:          "Save V0 to V5 at I",
+			vx:                5,
+			indexRegister:     0x100,
+			registers:         [16]uint8{10, 20, 30, 40, 50, 60},
+			wantMemory:        []uint8{10, 20, 30, 40, 50, 60},
+			wantIndexRegister: 6, // ((5 << 8) + 1)
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.testName, func(t *testing.T) {
+			c8 := &Chip8{}
+			c8.indexRegister = tt.indexRegister
+			c8.registers = tt.registers
+			c8.opcode = 0xF000 | uint16(tt.vx)<<8 | 0x55
+
+			c8.opFX55()
+
+			for i, want := range tt.wantMemory {
+				got := c8.memory[tt.indexRegister+uint16(i)]
+				if got != want {
+					t.Errorf("memory[%#x]=%#x, want %#x", tt.indexRegister+uint16(i), got, want)
+				}
+			}
+
+			if c8.indexRegister != tt.wantIndexRegister {
+				t.Errorf("indexRegister=%#x, want %#x", c8.indexRegister, tt.wantIndexRegister)
 			}
 		})
 	}

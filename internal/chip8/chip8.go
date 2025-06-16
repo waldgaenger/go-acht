@@ -2,7 +2,6 @@ package chip8
 
 import (
 	"fmt"
-	"image/color"
 	"log/slog"
 	"math/rand"
 	"os"
@@ -34,18 +33,6 @@ var fontSet = [80]byte{
 	0xE0, 0x90, 0x90, 0x90, 0xE0, // D
 	0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
 	0xF0, 0x80, 0xF0, 0x80, 0x80, // F
-}
-
-type colorProfile struct {
-	foreground color.RGBA
-	background color.RGBA
-}
-
-var profiles = map[string]colorProfile{
-	"black-white": {color.RGBA{255, 255, 255, 255}, color.RGBA{0, 0, 0, 255}},
-	"night-sky":   {color.RGBA{0, 0, 68, 255}, color.RGBA{255, 255, 204, 255}},
-	"console":     {color.RGBA{0, 0, 0, 255}, color.RGBA{34, 238, 34, 255}},
-	"honey":       {color.RGBA{153, 102, 0, 255}, color.RGBA{255, 204, 0, 255}},
 }
 
 type opcodeHandler func(*Chip8)
@@ -88,37 +75,32 @@ var dispatchTable = map[uint16]opcodeHandler{
 	0xF065: (*Chip8).opFX65,
 }
 
-// TODO: Decouple the Chip8 from the SDL library by abstracting the window and display away.
 type Chip8 struct {
 	registers      [16]uint8   // All 16 registers of the emulator
 	memory         [4096]uint8 // 4096 Bytes of RAM
 	programCounter uint16      // Holds the next instruction
 	indexRegister  uint16
-	callStack      [16]uint16
-	stackPointer   uint8
+	callStack      [16]uint16 // Holds all the program counter of the subroutines
+	stackPointer   uint8      // Always points to the current top of the call stack
 	opcode         uint16
 	keyPad         [16]uint8
-	delayTimer     uint8        // The delay timer is decremented at a rate of 60 Hz according to the specification.
-	soundTimer     uint8        // The sound timer is decremented at a rate of 60 Hz according to the specification.
-	display        [32][64]bool // 64x32 monochrome display
-	scaleFactor    int32        // Holds the scaling factor of the display
-	running        bool         // Indicates whether the emulator is running
-	drawed         bool
-	cleared        bool
-	colorProfile   colorProfile // Holds the color of the foreground and the background color
-	Input          input.InputHandler
-	Renderer       renderer.Renderer
+	delayTimer     uint8              // The delay timer is decremented at a rate of 60 Hz according to the specification.
+	soundTimer     uint8              // The sound timer is decremented at a rate of 60 Hz according to the specification.
+	display        [32][64]bool       // 64x32 monochrome display
+	scaleFactor    int32              // Holds the scaling factor of the display
+	running        bool               // Indicates whether the emulator is running
+	Input          input.InputHandler // Holds the keyboard handler
+	Renderer       renderer.Renderer  // Holds the graphics renderer
 }
 
-// Runs the Chip8 emulator with the given ROM and configuration.
-// Note that Run never returns unless there the renderer indicates a quit or there is an error.
-func (c8 *Chip8) Run(romPath string, scaleFactor int32, colorProfile string) error {
-
+// Run loads the CHIP-8 ROM from the specified romPath and starts the main emulation loop.
+// The emulator continuously executes instructions, processes input, updates timers, and renders the display.
+// This function only returns if the renderer signals a quit event or an error occurs during execution.
+func (c8 *Chip8) Run(romPath string) error {
 	if err := c8.loadRom(romPath); err != nil {
 		return fmt.Errorf("failed to load ROM: %w", err)
 	}
-	// TODO: Error should be checked and not discarded.
-	c8.init(scaleFactor, colorProfile)
+	c8.init()
 
 	clock := time.NewTicker(time.Millisecond)
 	video := time.NewTicker(time.Second / 60)
@@ -136,15 +118,8 @@ func (c8 *Chip8) Run(romPath string, scaleFactor int32, colorProfile string) err
 				c8.delayTimer--
 			}
 		case <-video.C:
-			if c8.cleared {
-				c8.cleared = false
-				c8.Renderer.Clear(c8.display, c8.colorProfile.background)
-				fmt.Println("Cleared")
-			}
-			if c8.drawed {
-				c8.draw()
-				c8.drawed = false
-			}
+			c8.draw()
+
 		case <-clock.C:
 			c8.updateInput()
 			c8.cycle()
@@ -156,11 +131,10 @@ func (c8 *Chip8) Run(romPath string, scaleFactor int32, colorProfile string) err
 }
 
 // Initializes the values of the Chip8 structure.
-func (c8 *Chip8) init(scaleFactor int32, colorProfile string) {
+func (c8 *Chip8) init() {
 	c8.programCounter = uint16(startAddress)
-	c8.scaleFactor = scaleFactor
-	c8.SetColorProfile(colorProfile)
-	// Loading the set of fonts into the specified memory area
+
+	// Loads the set of fonts into the specified memory area
 	copy(c8.memory[fontStartAddress:], fontSet[:])
 
 	c8.running = true
@@ -170,18 +144,8 @@ func (c8 *Chip8) Running() bool {
 	return c8.running
 }
 
-// Sets the color profile specified by the user.
-func (c8 *Chip8) SetColorProfile(profileName string) {
-	if profile, ok := profiles[profileName]; ok {
-		c8.colorProfile = profile
-	} else {
-		// Default profile which is black-white
-		c8.colorProfile = profiles["black-white"]
-	}
-}
-
 func (c8 *Chip8) draw() {
-	c8.Renderer.Draw(c8.display, c8.colorProfile.foreground, c8.colorProfile.background)
+	c8.Renderer.Draw(c8.display)
 }
 
 func (c8 *Chip8) updateInput() {
@@ -245,13 +209,22 @@ func (c8 *Chip8) decodeOpcode() uint16 {
 
 // Clears the display by resetting all pixels to 0.
 func (c8 *Chip8) op00E0() {
-	c8.cleared = true
 	c8.display = [32][64]bool{}
 }
 
 // Returns from a subroutine.
 // Decrements the stack pointer by one and sets the program counter to the address of the call stack on index of the stack pointer.
 func (c8 *Chip8) op00EE() {
+	// Stack underflow protection
+	if c8.stackPointer == 0 {
+		fmt.Printf(
+			"Stack underflow at PC=0x%03X (stackPointer=%d, stack size=%d).\n"+"Emulation halted.",
+			c8.programCounter, c8.stackPointer, len(c8.callStack),
+		)
+		c8.running = false
+		return
+	}
+
 	c8.stackPointer -= 1
 	c8.programCounter = c8.callStack[c8.stackPointer]
 }
@@ -518,10 +491,11 @@ func (c8 *Chip8) opFX07() {
 func (c8 *Chip8) opFX0A() {
 	var vx uint8 = uint8((c8.opcode & 0x0F00) >> 8)
 	pressed := false
-	for key := range c8.keyPad {
-		if c8.keyPad[key] != 0 {
+	for key, state := range c8.keyPad {
+		if state != 0 {
 			c8.registers[vx] = uint8(key)
 			pressed = true
+			break // Nur die erste gedrückte Taste speichern
 		}
 	}
 
