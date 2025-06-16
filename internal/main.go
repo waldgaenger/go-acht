@@ -1,4 +1,5 @@
 package main
+
 import (
 	"flag"
 	"fmt"
@@ -26,39 +27,30 @@ func main() {
 		return
 	}
 
-	if err := sdl.Init(sdl.INIT_EVERYTHING); err != nil {
-		slog.Error("an error occurred while trying to initialize the SDL library")
-		os.Exit(-1)
+	if *flagColorProfile != "" {
+		profile, found := renderer.Profiles[*flagColorProfile]
+
+		if !found {
+			profile = renderer.Profiles["black-white"]
+			fmt.Printf("no such color profile: %s - fallback: default profile black-white will be used \n", *flagColorProfile)
+		}
+		renderer.Profile = profile
 	}
 
-	window, err := sdl.CreateWindow("CHIP8 EMULATOR", sdl.WINDOWPOS_UNDEFINED, sdl.WINDOWPOS_UNDEFINED,
-		64*20, 32*20, sdl.WINDOW_SHOWN)
+	r, err := renderer.NewSDLRenderer()
 
 	if err != nil {
-		slog.Error("an error occurred while trying to initialize the SDL library: " + err.Error())
-		sdl.Quit()
-		os.Exit(-1)
-	}
-	r, err := sdl.CreateRenderer(window, -1, 0)
-
-	if err != nil {
-		slog.Error("an error occurred while trying to obtain a renderer" + err.Error())
-		sdl.Quit()
+		fmt.Println("an error occurred while trying to create a new SDLRenderer: ", err)
 		os.Exit(-1)
 	}
 
-	c8 := chip8.Chip8{
-		Input:    &input.SDLInput{},
-		Renderer: &renderer.SDLRenderer{Renderer: r},
-	}
+	c8 := chip8.Chip8{Input: &input.SDLInput{}, Renderer: r}
 
-	if err := c8.Run(*flagRom, int32(*flagScale), *flagColorProfile); err != nil {
+	if err := c8.Run(*flagRom); err != nil {
 		slog.Error("an error occurred while trying to run the emulator: " + err.Error())
-		sdl.Quit()
+		r.Cleanup()
 		os.Exit(-1)
 	}
-
-	fmt.Println("End!")
 
 	sdl.Quit()
 }
