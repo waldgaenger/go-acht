@@ -49,7 +49,7 @@ func NewSDLRenderer() (*SDLRenderer, error) {
 		return nil, fmt.Errorf("failed to create window: %w", err)
 	}
 
-	renderer, err := sdl.CreateRenderer(window, -1, sdl.RENDERER_ACCELERATED|sdl.RENDERER_PRESENTVSYNC)
+	renderer, err := sdl.CreateRenderer(window, -1, sdl.RENDERER_ACCELERATED)
 	if err != nil {
 		window.Destroy()
 		sdl.Quit()
