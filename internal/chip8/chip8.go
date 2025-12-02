@@ -83,7 +83,7 @@ type Chip8 struct {
 	callStack      [16]uint16 // Holds all the program counter of the subroutines
 	stackPointer   uint8      // Always points to the current top of the call stack
 	opcode         uint16
-	keyPad         [16]uint8
+	keyPad         [16]bool
 	delayTimer     uint8              // The delay timer is decremented at a rate of 60 Hz according to the specification.
 	soundTimer     uint8              // The sound timer is decremented at a rate of 60 Hz according to the specification.
 	display        [32][64]bool       // 64x32 monochrome display
@@ -464,7 +464,7 @@ func (c8 *Chip8) opEX9E() {
 
 	var key uint8 = c8.registers[vx]
 
-	if c8.keyPad[key] == 0x1 {
+	if c8.keyPad[key] == true {
 		c8.programCounter += 2
 	}
 }
@@ -475,7 +475,7 @@ func (c8 *Chip8) opEXA1() {
 
 	var key uint8 = c8.registers[vx]
 
-	if c8.keyPad[key] == 0x0 {
+	if c8.keyPad[key] == false {
 		c8.programCounter += 2
 	}
 }
@@ -492,7 +492,7 @@ func (c8 *Chip8) opFX0A() {
 	var vx uint8 = uint8((c8.opcode & 0x0F00) >> 8)
 	pressed := false
 	for key, state := range c8.keyPad {
-		if state != 0 {
+		if state != false {
 			c8.registers[vx] = uint8(key)
 			pressed = true
 			break // Nur die erste gedrückte Taste speichern

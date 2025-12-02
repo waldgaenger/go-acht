@@ -11,7 +11,8 @@ var keyMap = map[sdl.Keycode]uint8{
 
 type SDLInput struct{}
 
-func (s *SDLInput) PollKeys(keyPad *[16]uint8) (quit bool) {
+// TODO: Could be a boolean too.
+func (s *SDLInput) PollKeys(keyPad *[16]bool) (quit bool) {
 	for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
 		switch e := event.(type) {
 		case *sdl.QuitEvent:
@@ -20,9 +21,9 @@ func (s *SDLInput) PollKeys(keyPad *[16]uint8) (quit bool) {
 			if idx, ok := keyMap[e.Keysym.Sym]; ok {
 				switch e.Type {
 				case sdl.KEYDOWN:
-					keyPad[idx] = 1
+					keyPad[idx] = true
 				case sdl.KEYUP:
-					keyPad[idx] = 0
+					keyPad[idx] = false
 				}
 			}
 		}
