@@ -1307,7 +1307,7 @@ func TestOPEX9E(t *testing.T) {
 			c8.programCounter = tt.programCounterBefore
 
 			if tt.pressed {
-				c8.keyPad[tt.registerValueX] = 0x1
+				c8.keyPad[tt.registerValueX] = true
 			}
 
 			c8.opEX9E()
@@ -1377,7 +1377,7 @@ func TestOPEXA1(t *testing.T) {
 			c8.programCounter = tt.programCounterBefore
 
 			if tt.pressed {
-				c8.keyPad[tt.registerValueX] = 0x1
+				c8.keyPad[tt.registerValueX] = true
 			}
 
 			c8.opEXA1()
@@ -1443,7 +1443,7 @@ func TestOPFX0A(t *testing.T) {
 		registerX            uint8
 		registerValue        uint8
 		key                  uint8
-		keyValue             uint8
+		keyValue             bool
 		programCounterBefore uint16
 		programCounterAfter  uint16
 	}{
@@ -1454,7 +1454,7 @@ func TestOPFX0A(t *testing.T) {
 			0xA,
 			0xF,
 			0xF,
-			0x1,
+			true,
 			0x6C0,
 			0x6C0,
 		},

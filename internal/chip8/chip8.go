@@ -119,7 +119,6 @@ func (c8 *Chip8) Run(romPath string) error {
 			}
 		case <-video.C:
 			c8.draw()
-
 		case <-clock.C:
 			c8.updateInput()
 			c8.cycle()
@@ -129,6 +128,8 @@ func (c8 *Chip8) Run(romPath string) error {
 	return nil
 
 }
+
+// TODO: Should be constructor and the struct CHIP8 should not be exported.
 
 // Initializes the values of the Chip8 structure.
 func (c8 *Chip8) init() {
@@ -170,7 +171,7 @@ func (c8 *Chip8) cycle() {
 	if handler := dispatchTable[c8.decodeOpcode()]; handler != nil {
 		handler(c8)
 	} else {
-		fmt.Printf("Invalid opcode: %#04X\n", c8.opcode)
+		fmt.Printf("Invalid opcode: %#04X at %#04X\n", c8.opcode, c8.programCounter-2)
 	}
 
 }
