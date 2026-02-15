@@ -2,7 +2,6 @@ package chip8
 
 import (
 	"fmt"
-	"log/slog"
 	"math/rand"
 	"os"
 	"time"
@@ -187,7 +186,6 @@ func (c8 *Chip8) loadRom(pathToRom string) error {
 
 	copy(c8.memory[startAddress:], data)
 
-	slog.Info("ROM successfully loaded into memory", "size", len(data), "path", pathToRom)
 	return nil
 }
 
