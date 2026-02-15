@@ -129,8 +129,6 @@ func (c8 *Chip8) Run(romPath string) error {
 
 }
 
-// TODO: Should be constructor and the struct CHIP8 should not be exported.
-
 // Initializes the values of the Chip8 structure.
 func (c8 *Chip8) init() {
 	c8.programCounter = uint16(startAddress)

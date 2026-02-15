@@ -11,7 +11,6 @@ var keyMap = map[sdl.Keycode]uint8{
 
 type SDLInput struct{}
 
-// TODO: Could be a boolean too.
 func (s *SDLInput) PollKeys(keyPad *[16]bool) (quit bool) {
 	for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
 		switch e := event.(type) {
